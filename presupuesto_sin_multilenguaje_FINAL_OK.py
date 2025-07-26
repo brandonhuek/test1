@@ -1,4 +1,3 @@
-
 import streamlit as st
 from io import BytesIO
 from reportlab.pdfgen import canvas
@@ -33,9 +32,10 @@ if st.session_state.pagina == "confirmacion":
     st.image("logo_innovation_crafters.png", width=100)
     st.markdown('<div class="confirmacion">✅ ¡Gracias por tu solicitud!<br>Hemos recibido tu petición correctamente.<br>Nos pondremos en contacto contigo muy pronto.</div>', unsafe_allow_html=True)
     st.download_button("📄 Descargar PDF", key='descargar_pdf_button_final', data=st.session_state.pdf, file_name="presupuesto_cbd.pdf")
-   if st.button("🔁 Volver al inicio"):
-    st.session_state.pagina = "formulario"
+    if st.button("🔁 Volver al inicio"):
+        st.session_state.pagina = "formulario"
     st.stop()
+
 st.image("logo_innovation_crafters.png", width=200)
 st.title("Presupuesto personalizado Innovation Crafters")
 
@@ -141,77 +141,3 @@ def generar_pdf():
             c.drawString(2.5 * cm, y, f"{formato}: {cantidad} bolsas")
             y -= 0.35 * cm
 
-    y -= 1 * cm
-    for line in [
-        "Inversiones Brandon e Hijos SL",
-        "Calle Anselm Clavé 7, 17300, Blanes, Gerona",
-        "CIF: B42761262",
-        "IBAN: ES23 2100 0405 3402 0028 5866",
-        "Pago: 60% por adelantado, 40% al salir el producto"
-    ]:
-        c.drawString(2 * cm, y, line)
-        y -= 0.4 * cm
-
-    if imagenes:
-        c.showPage()
-        y = height - 2 * cm
-        c.setFont("Helvetica-Bold", 11)
-        c.drawString(2 * cm, y, "📸 Imágenes del producto")
-        y -= 0.5 * cm
-        for imagen in imagenes[:4]:
-            try:
-                img = Image.open(imagen)
-                img.thumbnail((400, 400))
-                img_io = BytesIO()
-                img.save(img_io, format='PNG')
-                img_io.seek(0)
-                img_reader = ImageReader(img_io)
-
-                if y < 8 * cm:
-                    c.showPage()
-                    y = height - 2 * cm
-
-                c.drawImage(img_reader, 2 * cm, y - 6 * cm, width=6 * cm, preserveAspectRatio=True)
-                y -= 7 * cm
-            except:
-                continue
-
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-if st.button("📄 Descargar presupuesto"):
-    pdf = generar_pdf()
-
-    try:
-        SMTP_SERVER = "mail.innovationcbd.es"
-        SMTP_PORT = 465
-        SMTP_USER = "crafters@innovationcbd.es"
-        SMTP_PASS = "(ArgentinA2013)"
-        COPIA_EMPRESA = "hola@innovationcbd.es"
-
-        email_msg = EmailMessage()
-        email_msg["Subject"] = "Presupuesto personalizado de Innovation Crafters"
-        email_msg["From"] = SMTP_USER
-        email_msg["To"] = email
-        email_msg["Bcc"] = COPIA_EMPRESA
-        email_msg.set_content(f'''
-Hola {nombre},
-
-Adjuntamos tu presupuesto personalizado.
-
-Un saludo,
-Equipo Innovation Crafters
-''')
-        email_msg.add_attachment(pdf.getvalue(), maintype="application", subtype="pdf", filename="presupuesto_cbd.pdf")
-
-        context = ssl.create_default_context()
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
-            server.login(SMTP_USER, SMTP_PASS)
-            server.send_message(email_msg)
-
-    except Exception as e:
-        st.error(f"❌ Error al enviar el correo: {str(e)}")
-
-    st.session_state.pdf = pdf
-    st.session_state.pagina = "confirmacion"
