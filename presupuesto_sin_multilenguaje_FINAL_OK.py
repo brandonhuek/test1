@@ -30,8 +30,12 @@ if "pagina" not in st.session_state:
 
 if st.session_state.pagina == "confirmacion":
     st.image("logo_innovation_crafters.png", width=100)
-    st.markdown('<div class="confirmacion">✅ ¡Gracias por tu solicitud!<br>Hemos recibido tu petición correctamente.<br>Nos pondremos en contacto contigo muy pronto.</div>', unsafe_allow_html=True)
-    st.download_button("📄 Descargar PDF", key='descargar_pdf_button_final', data=st.session_state.pdf, file_name="presupuesto_cbd.pdf")
+    st.markdown('<div class="confirmacion">✅ ¡Gracias por tu solicitud!...', unsafe_allow_html=True)
+
+    if "pdf" in st.session_state and st.session_state.pdf:
+        st.download_button("📄 Descargar PDF", key='descargar_pdf_button_final', data=st.session_state.pdf, file_name="presupuesto_cbd.pdf")
+    else:
+        st.warning("⚠️ El archivo PDF no está disponible. Por favor, regresa y vuelve a generar el presupuesto.")
     if st.button("🔁 Volver al inicio"):
         st.session_state.pagina = "formulario"
     st.stop()
