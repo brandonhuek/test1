@@ -12,10 +12,7 @@ from email.mime.application import MIMEApplication
 from email.mime.image import MIMEImage
 import ssl
 import re
-
-# --- Importaciones para Google Sheets ---
-import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+import datetime # Importar datetime para la fecha del presupuesto (se mantiene, es útil)
 
 # --- Configuración de la página general ---
 st.set_page_config(page_title="Innovation Crafters", layout="centered")
@@ -211,7 +208,7 @@ def enviar_email_con_adjunto(destinatario_email, pdf_buffer_data, nombre_archivo
 # --- Función para generar el PDF (se mantiene global) ---
 def generar_pdf(nombre, empresa, cif_nif, telefono, email, pais, direccion_fiscal, direccion_envio, observaciones,
                 materia_prima, modalidad, unidades_botellas, unidades_extracciones, coste_botellas, coste_extracciones,
-                precio_mano_obra, coste_total_bolsas, total_kg, bolsas, granel_gestion, tipo_envio, recargo, iva_aplicado, total, envio): # Añadido 'envio' como parámetro
+                precio_mano_obra, coste_total_bolsas, total_kg, bolsas, granel_gestion, tipo_envio, recargo, iva_aplicado, total, envio):
     pdf_buffer = BytesIO()
     c = canvas.Canvas(pdf_buffer, pagesize=A4)
     width, height = A4
@@ -261,7 +258,9 @@ def generar_pdf(nombre, empresa, cif_nif, telefono, email, pais, direccion_fisca
     c.setFont("Helvetica", 10)
 
     # Calcular IVA para el PDF
-    iva_pdf = iva_aplicado * (total - recargo - envio - coste_botellas - coste_extracciones - precio_mano_obra - coste_total_bolsas) # Ajuste para calcular IVA correctamente en el PDF
+    # El IVA se calcula sobre la base imponible (base + recargo)
+    base_imponible_para_iva = (coste_botellas + coste_extracciones + envio) if materia_prima == "Aceites CBD o Extracciones (Crumble, Isolado, Cristales)" else (precio_mano_obra + coste_total_bolsas + envio)
+    iva_pdf = iva_aplicado * (base_imponible_para_iva + recargo)
 
     detalles = []
     if materia_prima == "Aceites CBD o Extracciones (Crumble, Isolado, Cristales)":
@@ -320,88 +319,6 @@ def generar_pdf(nombre, empresa, cif_nif, telefono, email, pais, direccion_fisca
     c.save()
     pdf_buffer.seek(0)
     return pdf_buffer
-
-# --- Conexión a Google Sheets ---
-@st.cache_resource(ttl=3600) # Cachea la conexión para evitar re-autenticación constante
-def get_google_sheet_client():
-    try:
-        # Cargar las credenciales desde el archivo JSON
-        # Asegúrate de que 'credentials.json' esté en la misma carpeta que tu script
-        # O usa st.secrets para despliegues en Streamlit Cloud
-        if "gcp_service_account" in st.secrets:
-            # Para Streamlit Cloud, usa st.secrets
-            creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], 
-                                                                     ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
-        else:
-            # Para desarrollo local, usa el archivo credentials.json
-            creds = ServiceAccountCredentials.from_json_keyfile_name('credentials.json', 
-                                                                     ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"])
-        
-        client = gspread.authorize(creds)
-        return client
-    except FileNotFoundError:
-        st.error("Error: 'credentials.json' no encontrado. Asegúrate de que el archivo de credenciales de Google Sheets esté en la misma carpeta que tu script.")
-        st.stop()
-    except Exception as e:
-        st.error(f"Error al autenticarse con Google Sheets: {e}")
-        st.stop()
-
-# Inicializar el cliente de Google Sheets
-gc = get_google_sheet_client()
-
-# --- Función para guardar datos en Google Sheets ---
-def guardar_presupuesto_en_sheets(datos_presupuesto):
-    try:
-        spreadsheet = gc.open("Presupuestos Innovation Crafters") # Nombre de tu hoja de cálculo
-        worksheet = spreadsheet.sheet1 # O el nombre de tu hoja específica, ej. spreadsheet.worksheet("Hoja1")
-
-        # Obtener los encabezados actuales de la hoja para asegurar el orden
-        # Si la hoja está vacía, puedes definir los encabezados aquí
-        if not worksheet.row_values(1): # Si la primera fila está vacía, asume que no hay encabezados
-            headers = [
-                "Fecha", "Nombre", "Empresa", "CIF/NIF", "Teléfono", "Email", "País",
-                "Dirección Fiscal", "Dirección de Envío", "Observaciones",
-                "Materia Prima", "Modalidad", "Unidades Botellas", "Unidades Extracciones",
-                "Coste Botellas", "Coste Extracciones", "Precio Mano Obra", "Coste Total Bolsas",
-                "Total Kg", "Bolsas (Detalle)", "Gestión Granel", "Tipo Envío",
-                "Recargo Equivalencia", "IVA Aplicado", "Total Presupuesto"
-            ]
-            worksheet.append_row(headers)
-        
-        # Preparar la fila de datos
-        row_data = [
-            datos_presupuesto.get("Fecha", ""),
-            datos_presupuesto.get("Nombre", ""),
-            datos_presupuesto.get("Empresa", ""),
-            datos_presupuesto.get("CIF/NIF", ""),
-            datos_presupuesto.get("Teléfono", ""),
-            datos_presupuesto.get("Email", ""),
-            datos_presupuesto.get("País", ""),
-            datos_presupuesto.get("Dirección Fiscal", ""),
-            datos_presupuesto.get("Dirección de Envío", ""),
-            datos_presupuesto.get("Observaciones", ""),
-            datos_presupuesto.get("Materia Prima", ""),
-            datos_presupuesto.get("Modalidad", ""),
-            datos_presupuesto.get("Unidades Botellas", 0),
-            datos_presupuesto.get("Unidades Extracciones", 0),
-            datos_presupuesto.get("Coste Botellas", 0.0),
-            datos_presupuesto.get("Coste Extracciones", 0.0),
-            datos_presupuesto.get("Precio Mano Obra", 0.0),
-            datos_presupuesto.get("Coste Total Bolsas", 0.0),
-            datos_presupuesto.get("Total Kg", 0.0),
-            str(datos_presupuesto.get("Bolsas (Detalle)", {})), # Convertir diccionario a string
-            datos_presupuesto.get("Gestión Granel", ""),
-            datos_presupuesto.get("Tipo Envío", ""),
-            datos_presupuesto.get("Recargo Equivalencia", 0.0),
-            datos_presupuesto.get("IVA Aplicado", 0.0),
-            datos_presupuesto.get("Total Presupuesto", 0.0)
-        ]
-        
-        worksheet.append_row(row_data)
-        st.success("✅ Presupuesto guardado en Google Sheets.")
-    except Exception as e:
-        st.error(f"❌ Error al guardar el presupuesto en Google Sheets: {e}")
-
 
 # --- Control de sesión para la navegación ---
 if "current_page" not in st.session_state:
@@ -691,39 +608,6 @@ elif st.session_state.current_page == "presupuesto":
             file_name = "presupuesto_innovation_crafters.pdf"
 
             st.session_state.pdf_data_for_download = pdf_data
-
-            # Preparar datos para Google Sheets
-            import datetime
-            datos_para_sheets = {
-                "Fecha": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                "Nombre": nombre,
-                "Empresa": empresa,
-                "CIF/NIF": cif_nif,
-                "Teléfono": telefono,
-                "Email": email,
-                "País": pais,
-                "Dirección Fiscal": direccion_fiscal,
-                "Dirección de Envío": direccion_envio,
-                "Observaciones": observaciones,
-                "Materia Prima": materia_prima,
-                "Modalidad": modalidad,
-                "Unidades Botellas": unidades_botellas,
-                "Unidades Extracciones": unidades_extracciones,
-                "Coste Botellas": coste_botellas,
-                "Coste Extracciones": coste_extracciones,
-                "Precio Mano Obra": precio_mano_obra,
-                "Coste Total Bolsas": coste_total_bolsas,
-                "Total Kg": total_kg,
-                "Bolsas (Detalle)": bolsas,
-                "Gestión Granel": granel_gestion,
-                "Tipo Envío": tipo_envio,
-                "Recargo Equivalencia": recargo,
-                "IVA Aplicado": iva_aplicado,
-                "Total Presupuesto": total
-            }
-
-            # Guardar en Google Sheets
-            guardar_presupuesto_en_sheets(datos_para_sheets)
 
             # Enviar correo electrónico
             if enviar_email_con_adjunto(email, pdf_data, file_name, lang["asunto_email"], lang["cuerpo_email_html"], lang["cuerpo_email_plain"]):
